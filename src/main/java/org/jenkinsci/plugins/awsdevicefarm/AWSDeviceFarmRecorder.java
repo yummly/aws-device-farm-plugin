@@ -14,35 +14,14 @@
 //
 package org.jenkinsci.plugins.awsdevicefarm;
 
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.services.devicefarm.model.Artifact;
-import com.amazonaws.services.devicefarm.model.ArtifactCategory;
-import com.amazonaws.services.devicefarm.model.BillingMethod;
-import com.amazonaws.services.devicefarm.model.DevicePool;
+import com.amazonaws.services.devicefarm.model.*;
 import com.amazonaws.services.devicefarm.model.Job;
-import com.amazonaws.services.devicefarm.model.ListArtifactsResult;
-import com.amazonaws.services.devicefarm.model.ListJobsResult;
-import com.amazonaws.services.devicefarm.model.ListSuitesResult;
-import com.amazonaws.services.devicefarm.model.ListTestsResult;
-import com.amazonaws.services.devicefarm.model.Location;
 import com.amazonaws.services.devicefarm.model.Project;
-import com.amazonaws.services.devicefarm.model.Radios;
-import com.amazonaws.services.devicefarm.model.ScheduleRunConfiguration;
-import com.amazonaws.services.devicefarm.model.ScheduleRunResult;
-import com.amazonaws.services.devicefarm.model.ScheduleRunTest;
-import com.amazonaws.services.devicefarm.model.Suite;
-import com.amazonaws.services.devicefarm.model.Test;
-import com.amazonaws.services.devicefarm.model.TestType;
-import com.amazonaws.services.devicefarm.model.Upload;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.model.AbstractBuild;
-import hudson.model.AbstractProject;
-import hudson.model.Action;
-import hudson.model.BuildListener;
-import hudson.model.Result;
+import hudson.model.*;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.BuildStepMonitor;
 import hudson.tasks.Publisher;
@@ -53,18 +32,7 @@ import hudson.util.ListBoxModel;
 import net.sf.json.JSONObject;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
-import org.jenkinsci.plugins.awsdevicefarm.test.AppiumJavaJUnitTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.AppiumJavaTestNGTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.AppiumPythonTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.AppiumWebJavaJUnitTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.AppiumWebJavaTestNGTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.AppiumWebPythonTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.CalabashTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.InstrumentationTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.UIAutomationTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.UIAutomatorTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.XCTestTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.XCTestUITest;
+import org.jenkinsci.plugins.awsdevicefarm.test.*;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest;
@@ -76,13 +44,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Post-build step for running tests on AWS Device Farm.
@@ -160,6 +122,8 @@ public class AWSDeviceFarmRecorder extends Recorder {
     public String appiumVersionPython;
     public String appiumVersionTestng;
 
+    private static final String APPIUM_VERSION_1_9_1 = "1.9.1";
+    private static final String APPIUM_VERSION_1_7_1 = "1.7.1";
     private static final String APPIUM_VERSION_1_6_3 = "1.6.3";
     private static final String APPIUM_VERSION_1_6_5 = "1.6.5";
     private static final String APPIUM_VERSION_1_4_16 = "1.4.16";
@@ -419,7 +383,7 @@ public class AWSDeviceFarmRecorder extends Recorder {
         }
 
         // Create & configure the AWSDeviceFarm client.
-        AWSDeviceFarm adf = getAWSDeviceFarm()
+        JenkinsAWSDeviceFarm adf = getAWSDeviceFarm()
                 .withLogger(listener.getLogger())
                 .withWorkspace(workspace)
                 .withArtifactsDir(artifactsDir)
@@ -622,7 +586,7 @@ public class AWSDeviceFarmRecorder extends Recorder {
         return configuration;
     }
 
-    private Map<String, FilePath> getSuites(AWSDeviceFarm adf, ScheduleRunResult run, Map<String, FilePath> jobs) throws IOException, InterruptedException {
+    private Map<String, FilePath> getSuites(JenkinsAWSDeviceFarm adf, ScheduleRunResult run, Map<String, FilePath> jobs) throws IOException, InterruptedException {
         Map<String, FilePath> suites = new HashMap<String, FilePath>();
         String runArn = run.getRun().getArn();
         String components[] = runArn.split(":");
@@ -642,7 +606,7 @@ public class AWSDeviceFarmRecorder extends Recorder {
         return suites;
     }
 
-    private Map<String, FilePath> getTests(AWSDeviceFarm adf, ScheduleRunResult run, Map<String, FilePath> suites) throws IOException, InterruptedException {
+    private Map<String, FilePath> getTests(JenkinsAWSDeviceFarm adf, ScheduleRunResult run, Map<String, FilePath> suites) throws IOException, InterruptedException {
         Map<String, FilePath> tests = new HashMap<String, FilePath>();
         String runArn = run.getRun().getArn();
         String components[] = runArn.split(":");
@@ -662,7 +626,7 @@ public class AWSDeviceFarmRecorder extends Recorder {
         return tests;
     }
 
-    private Map<String, FilePath> getJobs(AWSDeviceFarm adf, ScheduleRunResult run, FilePath resultsDir) throws IOException, InterruptedException {
+    private Map<String, FilePath> getJobs(JenkinsAWSDeviceFarm adf, ScheduleRunResult run, FilePath resultsDir) throws IOException, InterruptedException {
         Map<String, FilePath> jobs = new HashMap<String, FilePath>();
         ListJobsResult result = adf.listJobs(run.getRun().getArn());
         for (Job job : result.getJobs()) {
@@ -689,7 +653,7 @@ public class AWSDeviceFarmRecorder extends Recorder {
      * @throws IOException
      * @throws AWSDeviceFarmException
      */
-    private ScheduleRunTest getScheduleRunTest(EnvVars env, AWSDeviceFarm adf, Project project) throws InterruptedException, IOException, AWSDeviceFarmException {
+    private ScheduleRunTest getScheduleRunTest(EnvVars env, JenkinsAWSDeviceFarm adf, Project project) throws InterruptedException, IOException, AWSDeviceFarmException {
         ScheduleRunTest testToSchedule = null;
         TestType testType = stringToTestType(testToRun);
 
@@ -1162,7 +1126,7 @@ public class AWSDeviceFarmRecorder extends Recorder {
      *
      * @return The Device Farm API.
      */
-    public AWSDeviceFarm getAWSDeviceFarm() {
+    public JenkinsAWSDeviceFarm getAWSDeviceFarm() {
         return getDescriptor().getAWSDeviceFarm();
     }
 
@@ -1244,13 +1208,13 @@ public class AWSDeviceFarmRecorder extends Recorder {
          *
          * @return The AWS Device Farm API object.
          */
-        public AWSDeviceFarm getAWSDeviceFarm() {
-            AWSDeviceFarm adf;
-            if (roleArn == null || roleArn.isEmpty()) {
-                adf = new AWSDeviceFarm(new BasicAWSCredentials(akid, skid));
-            } else {
-                adf = new AWSDeviceFarm(roleArn);
+        public JenkinsAWSDeviceFarm getAWSDeviceFarm() {
+            JenkinsAWSDeviceFarm adf;
+            if((akid == null || akid.isEmpty() || skid == null || skid.isEmpty())){
+                System.setProperty("AWS_ACCESS_KEY_ID", akid);
+                System.setProperty("AWS_SECRET_ACCESS_KEY", skid);
             }
+            adf = new JenkinsAWSDeviceFarm();
             return adf;
         }
 
@@ -1486,7 +1450,7 @@ public class AWSDeviceFarmRecorder extends Recorder {
         @SuppressWarnings("unused")
         public FormValidation doCheckIsRunUnmetered(@QueryParameter Boolean isRunUnmetered, @QueryParameter String appArtifact) {
             if (isRunUnmetered != null && isRunUnmetered) {
-                AWSDeviceFarm adf = getAWSDeviceFarm();
+                JenkinsAWSDeviceFarm adf = getAWSDeviceFarm();
                 String os = null;
                 try {
                     os = adf.getOs(appArtifact);
@@ -1584,6 +1548,8 @@ public class AWSDeviceFarmRecorder extends Recorder {
         public ListBoxModel doFillAppiumVersionJunitItems(@QueryParameter String currentAppiumVersion) {
             List<ListBoxModel.Option> entries = new ArrayList<ListBoxModel.Option>();
             ArrayList<String> appiumVersions = new ArrayList<String>();
+            appiumVersions.add(APPIUM_VERSION_1_9_1);
+            appiumVersions.add(APPIUM_VERSION_1_7_1);
             appiumVersions.add(APPIUM_VERSION_1_6_3);
             appiumVersions.add(APPIUM_VERSION_1_6_5);
             appiumVersions.add(APPIUM_VERSION_1_4_16);
@@ -1602,6 +1568,8 @@ public class AWSDeviceFarmRecorder extends Recorder {
         public ListBoxModel doFillAppiumVersionTestngItems(@QueryParameter String currentAppiumVersion) {
             List<ListBoxModel.Option> entries = new ArrayList<ListBoxModel.Option>();
             ArrayList<String> appiumVersions = new ArrayList<String>();
+            appiumVersions.add(APPIUM_VERSION_1_9_1);
+            appiumVersions.add(APPIUM_VERSION_1_7_1);
             appiumVersions.add(APPIUM_VERSION_1_6_3);
             appiumVersions.add(APPIUM_VERSION_1_6_5);
             appiumVersions.add(APPIUM_VERSION_1_4_16);
@@ -1623,6 +1591,8 @@ public class AWSDeviceFarmRecorder extends Recorder {
             List<ListBoxModel.Option> entries = new ArrayList<ListBoxModel.Option>();
             //System.out.print("getting appium version");
             ArrayList<String> appiumVersions = new ArrayList<String>();
+            appiumVersions.add(APPIUM_VERSION_1_9_1);
+            appiumVersions.add(APPIUM_VERSION_1_7_1);
             appiumVersions.add(APPIUM_VERSION_1_6_3);
             appiumVersions.add(APPIUM_VERSION_1_6_5);
             appiumVersions.add(APPIUM_VERSION_1_4_16);
@@ -1640,7 +1610,7 @@ public class AWSDeviceFarmRecorder extends Recorder {
          */
         private synchronized List<String> getAWSDeviceFarmProjects() {
             if (projectsCache.isEmpty()) {
-                AWSDeviceFarm adf = getAWSDeviceFarm();
+                JenkinsAWSDeviceFarm adf = getAWSDeviceFarm();
 
                 for (Project project : adf.getProjects()) {
                     projectsCache.add(project.getName());
@@ -1662,7 +1632,7 @@ public class AWSDeviceFarmRecorder extends Recorder {
             List<String> poolNames = poolsCache.get(projectName);
 
             if (poolNames == null || poolNames.isEmpty()) {
-                AWSDeviceFarm adf = getAWSDeviceFarm();
+                JenkinsAWSDeviceFarm adf = getAWSDeviceFarm();
                 try {
                     List<DevicePool> pools = adf.getDevicePools(projectName);
                     poolNames = new ArrayList<String>();

@@ -61,7 +61,7 @@ public class AWSDeviceFarmTestResultAction extends AbstractTestResultAction<AWSD
      *
      * @param runResult
      */
-    public void waitForRunCompletion(AWSDeviceFarm adf, ScheduleRunResult runResult) throws InterruptedException {
+    public void waitForRunCompletion(JenkinsAWSDeviceFarm adf, ScheduleRunResult runResult) throws InterruptedException {
         while (true) {
             GetRunResult latestRunResult = adf.describeRun(runResult.getRun().getArn());
             Run run = latestRunResult.getRun();
