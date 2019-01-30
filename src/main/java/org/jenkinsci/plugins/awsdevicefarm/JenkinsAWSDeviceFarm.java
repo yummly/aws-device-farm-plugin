@@ -15,58 +15,20 @@
 package org.jenkinsci.plugins.awsdevicefarm;
 
 import com.amazonaws.ClientConfiguration;
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
-import com.amazonaws.services.devicefarm.AWSDeviceFarmClient;
-import com.amazonaws.services.devicefarm.model.AccountSettings;
-import com.amazonaws.services.devicefarm.model.ArtifactCategory;
-import com.amazonaws.services.devicefarm.model.CreateUploadRequest;
-import com.amazonaws.services.devicefarm.model.DevicePool;
-import com.amazonaws.services.devicefarm.model.ExecutionConfiguration;
-import com.amazonaws.services.devicefarm.model.GetAccountSettingsRequest;
-import com.amazonaws.services.devicefarm.model.GetRunRequest;
-import com.amazonaws.services.devicefarm.model.GetRunResult;
-import com.amazonaws.services.devicefarm.model.GetUploadRequest;
-import com.amazonaws.services.devicefarm.model.GetUploadResult;
-import com.amazonaws.services.devicefarm.model.ListArtifactsRequest;
-import com.amazonaws.services.devicefarm.model.ListArtifactsResult;
-import com.amazonaws.services.devicefarm.model.ListDevicePoolsRequest;
-import com.amazonaws.services.devicefarm.model.ListDevicePoolsResult;
-import com.amazonaws.services.devicefarm.model.ListJobsRequest;
-import com.amazonaws.services.devicefarm.model.ListJobsResult;
-import com.amazonaws.services.devicefarm.model.ListProjectsRequest;
-import com.amazonaws.services.devicefarm.model.ListProjectsResult;
-import com.amazonaws.services.devicefarm.model.ListSuitesRequest;
-import com.amazonaws.services.devicefarm.model.ListSuitesResult;
-import com.amazonaws.services.devicefarm.model.ListTestsRequest;
-import com.amazonaws.services.devicefarm.model.ListTestsResult;
-import com.amazonaws.services.devicefarm.model.NotFoundException;
-import com.amazonaws.services.devicefarm.model.Project;
-import com.amazonaws.services.devicefarm.model.ScheduleRunConfiguration;
-import com.amazonaws.services.devicefarm.model.ScheduleRunRequest;
-import com.amazonaws.services.devicefarm.model.ScheduleRunResult;
-import com.amazonaws.services.devicefarm.model.ScheduleRunTest;
-import com.amazonaws.services.devicefarm.model.Upload;
+import com.amazonaws.auth.AWSCredentialsProvider;
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.regions.Regions;
+import com.amazonaws.services.devicefarm.AWSDeviceFarm;
+import com.amazonaws.services.devicefarm.AWSDeviceFarmClientBuilder;
+import com.amazonaws.services.devicefarm.model.*;
 import hudson.EnvVars;
 import hudson.FilePath;
-import org.apache.commons.lang.RandomStringUtils;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.FileEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
-import org.jenkinsci.plugins.awsdevicefarm.test.AppiumWebJavaJUnitTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.AppiumWebJavaTestNGTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.AppiumWebPythonTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.AppiumJavaJUnitTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.AppiumJavaTestNGTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.AppiumPythonTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.CalabashTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.InstrumentationTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.UIAutomationTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.UIAutomatorTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.XCTestTest;
-import org.jenkinsci.plugins.awsdevicefarm.test.XCTestUITest;
+import org.jenkinsci.plugins.awsdevicefarm.test.*;
 
 import java.io.File;
 import java.io.IOException;
@@ -77,8 +39,8 @@ import java.util.List;
 /**
  * AWS Device Farm API wrapper class.
  */
-public class AWSDeviceFarm {
-    private AWSDeviceFarmClient api;
+public class JenkinsAWSDeviceFarm {
+    private AWSDeviceFarm api;
     private PrintStream log;
     private FilePath workspace;
     private FilePath artifactsDir;
@@ -87,46 +49,12 @@ public class AWSDeviceFarm {
     private static final Integer DEFAULT_JOB_TIMEOUT_MINUTE = 60;
 
     //// Constructors
-
-    /**
-     * AWSDeviceFarm constructor.
-     *
-     * @param roleArn Role ARN to use for authentication.
-     */
-    public AWSDeviceFarm(String roleArn) {
-        this(null, roleArn);
+    public JenkinsAWSDeviceFarm() {
+        AWSCredentialsProvider credsProvider = DefaultAWSCredentialsProviderChain.getInstance();
+        ClientConfiguration clientConfiguration = new ClientConfiguration().withUserAgentPrefix("AWS Device Farm - Jenkins v1.0");
+        api = AWSDeviceFarmClientBuilder.standard().withCredentials(credsProvider).withRegion(Regions.US_WEST_2).withClientConfiguration(clientConfiguration).build();
+        //api.setServiceNameIntern("devicefarm");
     }
-
-    /**
-     * AWSDeviceFarm constructor.
-     *
-     * @param creds AWSCredentials to use for authentication.
-     */
-    public AWSDeviceFarm(AWSCredentials creds) {
-        this(creds, null);
-    }
-
-    /**
-     * Private AWSDeviceFarm constructor. Uses the roleArn to generate STS creds if the roleArn isn't null; otherwise
-     * just uses the AWSCredentials creds.
-     *
-     * @param creds   AWSCredentials creds to use for authentication.
-     * @param roleArn Role ARN to use for authentication.
-     */
-    private AWSDeviceFarm(AWSCredentials creds, String roleArn) {
-        if (roleArn != null) {
-            STSAssumeRoleSessionCredentialsProvider sts = new STSAssumeRoleSessionCredentialsProvider
-                    .Builder(roleArn, RandomStringUtils.randomAlphanumeric(8))
-                    .build();
-            creds = sts.getCredentials();
-        }
-
-        ClientConfiguration clientConfiguration = new ClientConfiguration().withUserAgent("AWS Device Farm - Jenkins v1.0");
-        api = new AWSDeviceFarmClient(creds, clientConfiguration);
-        api.setServiceNameIntern("devicefarm");
-    }
-
-    //// Builder Methods
 
     /**
      * Logger setter.
@@ -134,7 +62,7 @@ public class AWSDeviceFarm {
      * @param logger The log print stream.
      * @return The AWSDeviceFarm object.
      */
-    public AWSDeviceFarm withLogger(PrintStream logger) {
+    public JenkinsAWSDeviceFarm withLogger(PrintStream logger) {
         this.log = logger;
         return this;
     }
@@ -145,7 +73,7 @@ public class AWSDeviceFarm {
      * @param workspace The FilePath to the Jenkins workspace.
      * @return The AWSDeviceFarm object.
      */
-    public AWSDeviceFarm withWorkspace(FilePath workspace) {
+    public JenkinsAWSDeviceFarm withWorkspace(FilePath workspace) {
         this.workspace = workspace;
         return this;
     }
@@ -156,7 +84,7 @@ public class AWSDeviceFarm {
      * @param artifactsDir The FilePath to the Jenkins artifacts directory.
      * @return The AWSDeviceFarm object.
      */
-    public AWSDeviceFarm withArtifactsDir(FilePath artifactsDir) {
+    public JenkinsAWSDeviceFarm withArtifactsDir(FilePath artifactsDir) {
         this.artifactsDir = artifactsDir;
         return this;
     }
@@ -167,7 +95,7 @@ public class AWSDeviceFarm {
      * @param env The EnvVars Jenkins environment.
      * @return The AWSDeviceFarm object.
      */
-    public AWSDeviceFarm withEnv(EnvVars env) {
+    public JenkinsAWSDeviceFarm withEnv(EnvVars env) {
         this.env = env;
         return this;
     }
